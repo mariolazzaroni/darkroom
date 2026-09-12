@@ -3,7 +3,7 @@ from io import BytesIO
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from app.models.image import AdjustmentParameters, UploadResponse
+from app.models.image import AdjustmentParameters, ExportParameters, UploadResponse
 from app.services.image_processor import InvalidImageError, StoredImageNotFoundError
 
 router = APIRouter()
@@ -36,12 +36,24 @@ def create_preview(
     return _jpeg_response(image_bytes, "preview.jpg", inline=True)
 
 
+@router.get("/images/{image_id}/original-preview")
+def original_preview(image_id: str, request: Request) -> StreamingResponse:
+    try:
+        image_bytes = request.app.state.image_processor.render_original_preview(image_id)
+    except StoredImageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Immagine non trovata") from exc
+
+    return _jpeg_response(image_bytes, "original-preview.jpg", inline=True)
+
+
 @router.post("/images/{image_id}/export")
 def export_image(
-    image_id: str, parameters: AdjustmentParameters, request: Request
+    image_id: str, parameters: ExportParameters, request: Request
 ) -> StreamingResponse:
     try:
-        image_bytes = request.app.state.image_processor.render_export(image_id, parameters)
+        image_bytes = request.app.state.image_processor.render_export(
+            image_id, parameters, quality=parameters.quality
+        )
     except StoredImageNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Immagine non trovata") from exc
 
@@ -55,4 +67,3 @@ def _jpeg_response(image_bytes: bytes, filename: str, inline: bool) -> Streaming
         media_type="image/jpeg",
         headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
     )
-
